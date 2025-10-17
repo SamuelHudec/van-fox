@@ -1,0 +1,88 @@
+esphome:
+  name: van-fox
+  comment: "Portable air quality monitor for camper van"
+  friendly_name: Van Fox
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Enable Home Assistant API (optional)
+api:
+  encryption:
+    key: "EJ7ER4no3J1DL6vcjA2jwU7nyj7ArRj2mLRc1ckaM7g="
+
+# Enable OTA updates
+ota:
+
+# Wi-Fi (can stay disabled if you only compile)
+wifi:
+  ssid: "copele"
+  password: "Chudoba97411"
+  ap:
+    ssid: "Vanfox Fallback Hotspot"
+    password: "t7UXURo1DLHn"
+
+# I2C setup for LaskaKit MicroESP-C3 mini
+i2c:
+  sda: GPIO8
+  scl: GPIO10
+  scan: true
+  id: bus_a
+
+captive_portal:
+
+web_server:
+  port: 80
+
+# --- Display SSD1306 128x32 ---
+display:
+  - platform: ssd1306_i2c
+    id: oled
+    model: "SSD1306 128x32"
+    address: 0x3C
+    rotation: 0
+    lambda: |-
+      it.printf(0, 0, id(font_small), "CO2: %.0f ppm", id(co2).state);
+      it.printf(0, 10, id(font_small), "T: %.1f°C  H: %.1f%%", id(temperature).state, id(humidity).state);
+      it.printf(0, 20, id(font_small), "VOC: %.0f  NOx: %.0f", id(voc_index).state, id(nox_index).state);
+
+font:
+  - file: "arial.ttf"
+    id: font_small
+    size: 9
+
+# --- SCD41 (CO2, Temperature, Humidity) ---
+sensor:
+  - platform: scd4x
+    i2c_id: bus_a
+    co2:
+      name: "CO2 Concentration"
+      id: co2
+    temperature:
+      name: "Air Temperature"
+      id: temperature
+    humidity:
+      name: "Humidity"
+      id: humidity
+    update_interval: 10s
+
+  # --- SGP41 (VOC, NOx) ---
+  - platform: sgp4x
+    i2c_id: bus_a
+    voc:
+      name: "VOC Index"
+      id: voc_index
+    nox:
+      name: "NOx Index"
+      id: nox_index
+    compensation:
+      temperature_source: temperature
+      humidity_source: humidity
+    update_interval: 10s
