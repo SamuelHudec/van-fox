@@ -1,7 +1,7 @@
 ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION(('FreeCAD Model'),'2;1');
-FILE_NAME('Open CASCADE Shape Model','2025-10-17T19:09:08',(''),(''),
+FILE_NAME('Open CASCADE Shape Model','2025-10-17T19:28:25',(''),(''),
   'Open CASCADE STEP processor 7.8','FreeCAD','Unknown');
 FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));
 ENDSEC;
@@ -14,7 +14,7 @@ DATA;
 #4 = PRODUCT_DEFINITION_SHAPE('','',#5);
 #5 = PRODUCT_DEFINITION('design','',#6,#9);
 #6 = PRODUCT_DEFINITION_FORMATION('','',#7);
-#7 = PRODUCT('Pad002','Pad002','',(#8));
+#7 = PRODUCT('Body','Body','',(#8));
 #8 = PRODUCT_CONTEXT('',#2,'mechanical');
 #9 = PRODUCT_DEFINITION_CONTEXT('part definition',#2,'design');
 #10 = ADVANCED_BREP_SHAPE_REPRESENTATION('',(#11,#15),#5878);
@@ -5849,7 +5849,7 @@ DATA;
 #5638 = PLANE('',#5639);
 #5639 = AXIS2_PLACEMENT_3D('',#5640,#5641,#5642);
 #5640 = CARTESIAN_POINT('',(14.,5.,0.));
-#5641 = DIRECTION('',(1.,-0.,0.));
+#5641 = DIRECTION('',(1.,0.,0.));
 #5642 = DIRECTION('',(0.,1.,0.));
 #5643 = ADVANCED_FACE('',(#5644),#5663,.T.);
 #5644 = FACE_BOUND('',#5645,.F.);
