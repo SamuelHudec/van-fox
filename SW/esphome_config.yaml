@@ -23,8 +23,8 @@ ota:
 
 # Wi-Fi (can stay disabled if you only compile)
 wifi:
-  ssid: "copele"
-  password: "Chudoba97411"
+  ssid: ""
+  password: ""
   ap:
     ssid: "Vanfox Fallback Hotspot"
     password: "t7UXURo1DLHn"
