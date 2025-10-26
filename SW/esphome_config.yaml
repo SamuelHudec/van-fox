@@ -19,12 +19,12 @@ api:
     key: "EJ7ER4no3J1DL6vcjA2jwU7nyj7ArRj2mLRc1ckaM7g="
 
 # Enable OTA updates
-ota:
+# ota:
 
 # Wi-Fi (can stay disabled if you only compile)
 wifi:
-  ssid: ""
-  password: ""
+  ssid: "copele"
+  password: "Chudoba97411"
   ap:
     ssid: "Vanfox Fallback Hotspot"
     password: "t7UXURo1DLHn"
@@ -49,13 +49,13 @@ display:
     address: 0x3C
     rotation: 0
     lambda: |-
-      it.printf(0, 0, id(font_small), "CO2: %.0f ppm", id(co2).state);
-      it.printf(0, 10, id(font_small), "T: %.1f°C  H: %.1f%%", id(temperature).state, id(humidity).state);
-      it.printf(0, 20, id(font_small), "VOC: %.0f  NOx: %.0f", id(voc_index).state, id(nox_index).state);
+      it.printf(0, 0, id(my_font), esphome::display::COLOR_ON, "CO2: %.0f ppm", id(co2).state);
+      it.printf(0, 10, id(my_font), esphome::display::COLOR_ON, "T: %.1f°C  H: %.1f%%", id(temperature).state, id(humidity).state);
+      it.printf(0, 20, id(my_font), esphome::display::COLOR_ON, "VOC: %.0f  NOx: %.0f", id(voc_index).state, id(nox_index).state);
 
 font:
-  - file: "arial.ttf"
-    id: font_small
+  - file: "gfonts://Roboto Mono"
+    id: my_font
     size: 9
 
 # --- SCD41 (CO2, Temperature, Humidity) ---
@@ -71,7 +71,7 @@ sensor:
     humidity:
       name: "Humidity"
       id: humidity
-    update_interval: 10s
+    update_interval: 1s
 
   # --- SGP41 (VOC, NOx) ---
   - platform: sgp4x
@@ -85,4 +85,4 @@ sensor:
     compensation:
       temperature_source: temperature
       humidity_source: humidity
-    update_interval: 10s
+    update_interval: 1s
