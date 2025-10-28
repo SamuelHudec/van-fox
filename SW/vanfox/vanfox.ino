@@ -10,10 +10,9 @@
  *
  * Features:
  *  - Auto display sleep after inactivity
- *  - 3× shake → LEVEL MODE
- *  - 5× shake → STATISTICS MODE (10-min averages)
- *  - LEVEL MODE = digital spirit level
- *  - Robust motion detection and adaptive display refresh
+ *  - Triple-shake gesture to toggle LEVEL MODE
+ *  - Level mode (digital spirit level)
+ *  - Adaptive sensor/display update rates
  *********************************************************************/
 
 #include <Wire.h>
@@ -45,7 +44,7 @@ BMI270 imu;
 // ===================================================================
 // ---------------------- BATTERY CONFIG ------------------------------
 #define PIN_BAT_ADC 0
-#define BAT_DIVIDER_RATIO 1.7693877551
+#define BAT_DIVIDER_RATIO 1.7693877551  // (1M + 1.3M)
 
 float readBatteryVoltage() {
   return analogReadMilliVolts(PIN_BAT_ADC) * BAT_DIVIDER_RATIO / 1000.0;
@@ -62,57 +61,29 @@ const float PITCH_OFFSET = -88.2;
 const float ROLL_OFFSET  = 1.7;
 
 // ===================================================================
-// ---------------------- ENUM MODES ---------------------------------
-enum Mode { AIR_MODE, LEVEL_MODE, STATS_MODE };
-Mode currentMode = AIR_MODE;
-
-// ===================================================================
 // ---------------------- GLOBAL VARIABLES ---------------------------
 float co2_ppm = NAN, temperature_c = NAN, humidity_rh = NAN;
 float voc_index = NAN, nox_index = NAN;
 float battery_v = NAN;
 int battery_p = 0;
 bool charging = false;
+
 bool displayOn = true;
+bool gyroMode = false;
 unsigned long lastModeSwitch = 0;
 
+// ---------------------- TIMERS & PERIODS ---------------------------
+const uint32_t MOTION_PERIOD_MS   = 100;    // IMU polling (shake + motion)
+const uint32_t AIR_DISPLAY_MS     = 1000;  // redraw air screen
+const uint32_t LEVEL_DISPLAY_MS   = 200;   // redraw level screen
+const uint32_t SCD_READ_MS        = 2000;  // SCD41 read attempt
+const uint32_t SGP_READ_MS        = 2000;  // SGP41 read attempt
 
-// ---------------------- TIMERS -------------------------------------
-const uint32_t MOTION_PERIOD_MS   = 100;
-const uint32_t AIR_DISPLAY_MS     = 1000;
-const uint32_t LEVEL_DISPLAY_MS   = 200;
-const uint32_t STATS_DISPLAY_MS   = 2000;
-const uint32_t SCD_READ_MS        = 2000;
-const uint32_t SGP_READ_MS        = 2000;
-uint32_t t_motion = 0, t_air = 0, t_level = 0, t_stats = 0, t_scd = 0, t_sgp = 0;
-
-// ===================================================================
-// ---------------------- STATISTICS BUFFER --------------------------
-const int MAX_SAMPLES = 100;
-float co2_samples[MAX_SAMPLES];
-float temp_samples[MAX_SAMPLES];
-float hum_samples[MAX_SAMPLES];
-float voc_samples[MAX_SAMPLES];
-float nox_samples[MAX_SAMPLES];
-int sample_index = 0;
-int sample_count = 0;
-
-void addSample(float co2, float temp, float hum, float voc, float nox) {
-  co2_samples[sample_index] = co2;
-  temp_samples[sample_index] = temp;
-  hum_samples[sample_index] = hum;
-  voc_samples[sample_index] = voc;
-  nox_samples[sample_index] = nox;
-  sample_index = (sample_index + 1) % MAX_SAMPLES;
-  if (sample_count < MAX_SAMPLES) sample_count++;
-}
-
-float avg(const float *arr, int count) {
-  float sum = 0;
-  for (int i = 0; i < count; i++) sum += arr[i];
-  return count > 0 ? sum / count : NAN;
-}
-
+uint32_t t_motion = 0;
+uint32_t t_air    = 0;
+uint32_t t_level  = 0;
+uint32_t t_scd    = 0;
+uint32_t t_sgp    = 0;
 
 // ---------------------- ROBUST SHAKE DETECTION  ---------------------------
 bool detectShake(float shakeIntensity) {
@@ -127,6 +98,7 @@ bool detectShake(float shakeIntensity) {
   if (!wasAbove && shakeIntensity > UPPER_THRESHOLD) {
     wasAbove = true;
   }
+
   if (wasAbove && shakeIntensity < LOWER_THRESHOLD) {
     wasAbove = false;
     unsigned long now = millis();
@@ -135,6 +107,7 @@ bool detectShake(float shakeIntensity) {
       lastShake = now;
     }
   }
+
   return shakeDetected;
 }
 
@@ -156,7 +129,7 @@ void setup() {
 
   // --- OLED Init ---
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
-    Serial.println("❌ OLED not found!");
+    Serial.println("OLED not found!");
     while (true) delay(100);
   }
   display.setRotation(2);
@@ -167,28 +140,60 @@ void setup() {
   display.println("Initializing...");
   display.display();
 
+  // ---------------- SENSOR INITIALIZATION ----------------
+  bool scd_ok = false, sgp_ok = false, imu_ok = false;
+
   // --- SCD41 Init ---
+  Serial.println("Initializing SCD41...");
   scd4x.begin(Wire, 0x62);
   delay(500);
   scd4x.stopPeriodicMeasurement();
-  scd4x.reinit();
-  scd4x.startPeriodicMeasurement();
+  if (scd4x.reinit() == 0) {
+    scd4x.startPeriodicMeasurement();
+    scd_ok = true;
+    Serial.println("SCD41 ready.");
+  } else {
+    Serial.println("SCD41 not responding!");
+  }
 
   // --- SGP41 Init ---
+  Serial.println("Initializing SGP41...");
   sgp41.begin(Wire);
   delay(200);
+  // jednoduchý test čítania
+  uint16_t rawVoc, rawNox;
+  uint16_t dummyH = 0, dummyT = 0;
+  if (sgp41.measureRawSignals(dummyH, dummyT, rawVoc, rawNox) == 0) {
+    sgp_ok = true;
+    Serial.println("SGP41 ready.");
+  } else {
+    Serial.println("SGP41 not responding!");
+  }
 
   // --- BMI270 Init ---
   Serial.println("Initializing BMI270...");
-  if (imu.beginI2C(0x68) != BMI2_OK)
-    Serial.println("⚠️ BMI270 not detected!");
-  else
-    Serial.println("✅ BMI270 ready.");
+  if (imu.beginI2C(0x68) == BMI2_OK) {
+    imu_ok = true;
+    Serial.println("BMI270 ready.");
+  } else {
+    Serial.println("BMI270 not detected!");
+  }
 
+  // ---------------- DISPLAY SENSOR STATUS ----------------
   display.clearDisplay();
-  display.println("Sensors ready!");
+  display.setCursor(0, 0);
+  display.println("Sensor check:");
+  display.printf("SCD41: %s\n", scd_ok ? "OK" : "FAIL");
+  display.printf("SGP41: %s\n", sgp_ok ? "OK" : "FAIL");
+  display.printf("BMI270: %s\n", imu_ok ? "OK" : "FAIL");
+
+  if (scd_ok && sgp_ok && imu_ok)
+    display.println("All sensors ready!");
+  else
+    display.println("Some sensors missing!");
+
   display.display();
-  delay(1000);
+  delay(2000);
 }
 
 // ===================================================================
@@ -223,14 +228,11 @@ void loop() {
     }
   }
 
-  // --- collect stats ---
-  if (!isnan(co2_ppm) && !isnan(voc_index) && !isnan(nox_index)) {
-    addSample(co2_ppm, temperature_c, humidity_rh, voc_index, nox_index);
-  }
-
   // --- Battery ---
+  static float smoothBatteryV = 0.0;
   battery_v = readBatteryVoltage();
-  battery_p = voltageToPercent(battery_v);
+  smoothBatteryV = 0.9f * smoothBatteryV + 0.1f * battery_v;
+  battery_p = voltageToPercent(smoothBatteryV);
 
   // ============================================================
   // ------------------- Motion / Shake polling -----------------
@@ -244,7 +246,7 @@ void loop() {
         imu.data.accelZ * imu.data.accelZ
       );
 
-      float gyroMagnitude = sqrt(
+        float gyroMagnitude = sqrt(
         imu.data.gyroX * imu.data.gyroX +
         imu.data.gyroY * imu.data.gyroY +
         imu.data.gyroZ * imu.data.gyroZ
@@ -252,25 +254,25 @@ void loop() {
 
       float shakeIntensity = (accMagnitude - 1.0f) * 2.0f + (gyroMagnitude / 500.0f);
       Serial.printf("acc=%.2f g  gyro=%.1f °/s  shake=%.2f\n",
-                    accMagnitude, gyroMagnitude, shakeIntensity);
+                accMagnitude, gyroMagnitude, shakeIntensity);
 
-      // --- Robust detection ---
+      // --- Display move detection ---
       static unsigned long lastMotionTime = millis();
       if (accMagnitude > 1.05 && accMagnitude < 3.0) {
         lastMotionTime = millis();
         if (!displayOn && !gyroMode) {
           displayOn = true;
-          Serial.println("💡 Motion detected → display ON");
+          Serial.println("Motion detected → display ON");
         }
       }
       if (!gyroMode && displayOn && millis() - lastMotionTime > 10000) {
         displayOn = false;
         display.clearDisplay();
         display.display();
-        Serial.println("🌙 No motion → display OFF");
+        Serial.println("No motion → display OFF");
       }
 
-      // --- Robustné triple shake prepínanie ---
+      // --- Triple shake ---
       static int shakeCount = 0;
       static unsigned long lastShakeTime = 0;
 
@@ -280,7 +282,7 @@ void loop() {
         Serial.printf("Shake %d detected\n", shakeCount);
       }
 
-      if (millis() - lastShakeTime > 2000) shakeCount = 0;  // reset po 2s
+      if (millis() - lastShakeTime > 2000) shakeCount = 0;  // reset after 2 sec
 
       if (shakeCount >= 3) {
         shakeCount = 0;
@@ -293,16 +295,31 @@ void loop() {
         if (gyroMode) {
           display.println("Switching to");
           display.println("LEVEL MODE...");
-          Serial.println("🎯 Triple shake → LEVEL MODE ON");
+          Serial.println("Triple shake → LEVEL MODE ON");
         } else {
           display.println("Switching to");
           display.println("AIR MODE...");
-          Serial.println("📊 Triple shake → AIR MODE OFF");
+          Serial.println("Triple shake → AIR MODE OFF");
         }
         display.display();
         delay(1500);
       }
     }
+  }
+  
+  // ============================================================
+  // --- Automatic exit from LEVEL MODE after 2 minutes ---
+  if (gyroMode && (millis() - lastModeSwitch > 120000)) {  // 2 min = 120000 ms
+    gyroMode = false;
+    displayOn = true;
+    Serial.println("LEVEL MODE timeout → back to AIR MODE");
+
+    display.clearDisplay();
+    display.setCursor(0, 10);
+    display.println("Timeout expired");
+    display.println("--> AIR MODE");
+    display.display();
+    delay(1000);
   }
 
   // ============================================================
@@ -343,12 +360,17 @@ void loop() {
       display.printf("Pitch: %.1f°\n", smoothPitch);
       display.printf("Roll : %.1f°\n", smoothRoll);
       display.println((abs(smoothPitch) < 1.0 && abs(smoothRoll) < 1.0)
-                        ? "Level" : "Adjust");
+                        ? "--> Level <---" : "??? Adjust ???");
       display.display();
     }
   }
 
-  delay(5);
-  //esp_sleep_enable_timer_wakeup(50 * 1000); // 5 ms
-  //esp_light_sleep_start();
+  // ============================================================
+  // ------------------- POWER MANAGEMENT ------------------------
+  if (!gyroMode) {
+    esp_sleep_enable_timer_wakeup(50 * 1000); // 50 ms
+    esp_light_sleep_start();
+  } else {
+    delay(200);
+  }
 }
