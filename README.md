@@ -11,7 +11,7 @@ It combines multiple environmental sensors, a motion-activated OLED display, and
 - ~128czk [Oled Display](https://www.laskakit.cz/laskakit-oled-displej-128x32-0-91--i--c/)
 - ~198czk [Gyroscop](https://www.laskakit.cz/laskakit-bmi270-6-osy-gyroskop-a-akcelerometr/)
 - ~6czk [Buzz](https://www.laskakit.cz/aktivni-bzucak-3-3v/)
-- ~2czk [Switch](https://www.laskakit.cz/posuvny-prepinac-0-3a-50vdc/)
+- ~4czk [Switch](https://www.laskakit.cz/posuvny-prepinac-0-5a-50vdc/)
 - 4x~12czk [uŠup](https://www.laskakit.cz/--sup--stemma-qt--qwiic-jst-sh-4-pin-kabel-5cm/)
 
 ## ⚙️ Operating Modes
