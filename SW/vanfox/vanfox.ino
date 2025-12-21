@@ -30,11 +30,13 @@
 
 // ===================================================================
 // ---------------------- WIFI & MQTT CONFIG -------------------------
-#define WIFI_SSID "name"
-#define WIFI_PASSWORD "password"
+#define WIFI_SSID "id"
+#define WIFI_PASSWORD "pass"
 #define MQTT_SERVER "192.168.1.x"
 #define MQTT_PORT 1883
 #define RESTART_PIN 2
+#define MQTT_NAME "vanfox"
+#define MQTT_PASSWORD "vanfox97411"
 
 // ===================================================================
 // ---------------------- OLED CONFIG --------------------------------
@@ -74,8 +76,7 @@ int voltageToPercent(float voltage) {
 
 // ===================================================================
 // ---------------------- LEVEL OFFSETS -------------------------------
-const float PITCH_OFFSET = -88.2;
-const float ROLL_OFFSET  = 1.7;
+const float ROLL_OFFSET  = 0.5;  // Calibration offset for roll (adjust on level surface)
 
 // ===================================================================
 // ---------------------- GLOBAL VARIABLES ---------------------------
@@ -97,7 +98,7 @@ const uint32_t SCD_READ_MS        = 2000;  // SCD41 read attempt
 const uint32_t SGP_READ_MS        = 2000;  // SGP41 read attempt
 const uint32_t HOME_DISPLAY_TIMEOUT = 30000;      // 30s
 const uint32_t TRAVELING_DISPLAY_TIMEOUT = 10000;  // 10s
-const uint32_t HA_SEND_INTERVAL_MS = 120000;  // 2 minutes
+const uint32_t HA_SEND_INTERVAL_MS = 60000;  // 10 minutes
 const uint32_t MQTT_RECONNECT_INTERVAL_MS = 60000;  // 60s
 
 uint32_t t_motion = 0;
@@ -140,6 +141,11 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  // --- Disable WiFi immediately to prevent auto-connect ---
+  WiFi.persistent(false);  // Don't save credentials
+  WiFi.mode(WIFI_OFF);     // Turn off WiFi completely
+  delay(100);              // Let it fully shut down
+
   // --- Configure mode switch ---
   pinMode(RESTART_PIN, INPUT_PULLUP);
 
@@ -175,6 +181,15 @@ void setup() {
     // Switch ON - Try HOME mode with WiFi
     Serial.println("Switch ON - attempting HOME mode");
     display.println("Switch: HOME Mode");
+    display.println("Waiting 10s...");
+    display.println("(router rate limit)");
+    display.display();
+
+    // Wait to let router rate-limit expire
+    delay(10000);  // 10 second delay before WiFi attempt
+
+    display.clearDisplay();
+    display.setCursor(0, 0);
     display.println("Checking WiFi...");
     display.display();
 
@@ -295,6 +310,7 @@ void loop() {
         Serial.println("Switch ON - switching to HOME mode");
 
         display.clearDisplay();
+        display.setTextSize(1);
         display.setCursor(0, 10);
         display.println("Switching to");
         display.println("HOME MODE...");
@@ -315,6 +331,7 @@ void loop() {
         Serial.println("Switch OFF - switching to TRAVELING mode");
 
         display.clearDisplay();
+        display.setTextSize(1);
         display.setCursor(0, 10);
         display.println("Switching to");
         display.println("TRAVELING MODE...");
@@ -479,6 +496,7 @@ void loop() {
         lastModeSwitch = millis();
 
         display.clearDisplay();
+        display.setTextSize(1);
         display.setCursor(0, 10);
         if (gyroMode) {
           display.println("Switching to");
@@ -503,6 +521,7 @@ void loop() {
     Serial.println("LEVEL MODE timeout → back to AIR MODE");
 
     display.clearDisplay();
+    display.setTextSize(1);
     display.setCursor(0, 10);
     display.println("Timeout expired");
     display.println("--> AIR MODE");
@@ -516,6 +535,7 @@ void loop() {
     if (!gyroMode && (now - t_air >= AIR_DISPLAY_MS)) {
       t_air = now;
       display.clearDisplay();
+      display.setTextSize(1);  // Reset text size for air quality display
       display.setCursor(0, 0);
       display.printf("CO2: %.0f ppm\n", co2_ppm);
       display.printf("T: %.1fC  H: %.1f%%\n", temperature_c, humidity_rh);
@@ -539,28 +559,24 @@ void loop() {
     if (gyroMode && (now - t_level >= LEVEL_DISPLAY_MS)) {
       t_level = now;
       imu.getSensorData();
-      float pitch = atan2(imu.data.accelX,
-                          sqrt(imu.data.accelY * imu.data.accelY + imu.data.accelZ * imu.data.accelZ))
-                          * 180.0 / PI;
-      float roll  = atan2(imu.data.accelY,
-                          sqrt(imu.data.accelX * imu.data.accelX + imu.data.accelZ * imu.data.accelZ))
-                          * 180.0 / PI;
 
-      // --- Apply calibration offsets --- 
-      pitch += PITCH_OFFSET;
-      roll  += ROLL_OFFSET;
+      // Calculate roll (side-to-side tilt) only
+      float roll = atan2(imu.data.accelY,
+                         sqrt(imu.data.accelX * imu.data.accelX + imu.data.accelZ * imu.data.accelZ))
+                   * 180.0 / PI;
 
-      static float smoothPitch = pitch, smoothRoll = roll;
-      smoothPitch = 0.7f * smoothPitch + 0.3f * pitch;
-      smoothRoll  = 0.7f * smoothRoll  + 0.3f * roll;
+      // Apply calibration offset
+      roll += ROLL_OFFSET;
 
+      // Smooth the reading to reduce jitter
+      static float smoothRoll = roll;
+      smoothRoll = 0.7f * smoothRoll + 0.3f * roll;
+
+      // Display - just the roll angle
       display.clearDisplay();
-      display.setCursor(0, 0);
-      display.println("LEVEL MODE");
-      display.printf("Pitch: %.1f°\n", smoothPitch);
-      display.printf("Roll : %.1f°\n", smoothRoll);
-      display.println((abs(smoothPitch) < 1.0 && abs(smoothRoll) < 1.0)
-                        ? "--> Level <---" : "??? Adjust ???");
+      display.setTextSize(2);
+      display.setCursor(20, 10);
+      display.printf("%.1f", smoothRoll);
       display.display();
     }
   }
@@ -586,6 +602,17 @@ void loop() {
 // ---------------------- WIFI FUNCTIONS -----------------------------
 bool initWiFi() {
   Serial.println("Attempting WiFi connection...");
+
+  // Clean WiFi state before connecting (prevents stale connection issues)
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  delay(3000);  // Wait 1 second for router rate-limit to clear
+
+  // Disable auto-reconnect to prevent interference
+  WiFi.setAutoReconnect(false);
+  WiFi.persistent(false);  // Don't save credentials to flash
+
+  // Now start fresh connection
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -622,7 +649,7 @@ bool initHomeAssistantAPI() {
 
   mqtt.setServer(MQTT_SERVER, MQTT_PORT);
   mqtt.setBufferSize(512);
-  mqtt.setKeepAlive(15);  // Add explicit keep-alive
+  mqtt.setKeepAlive(60);  // Increased from 15 to 60 to prevent timeout with 10-min send interval
 
   int retries = 3;
   while (retries > 0 && !mqtt.connected()) {
@@ -630,7 +657,7 @@ bool initHomeAssistantAPI() {
     Serial.print(4 - retries);
     Serial.print("... ");
 
-    if (mqtt.connect("vanfox", "vanfox", "vanfox97411")) {
+    if (mqtt.connect("vanfox", MQTT_NAME, MQTT_PASSWORD)) {
       Serial.println("connected!");
       publishDiscoveryConfig();
       return true;
@@ -706,33 +733,6 @@ void publishDiscoveryConfig() {
     "\"dev_cla\":\"aqi\","
     "\"dev\":{\"ids\":[\"vanfox_001\"]}}", true);
 
-  // Battery Voltage
-  mqtt.publish("homeassistant/sensor/vanfox_battery_v/config",
-    "{\"name\":\"VanFox Battery Voltage\","
-    "\"stat_t\":\"homeassistant/sensor/vanfox/state\","
-    "\"unit_of_meas\":\"V\","
-    "\"val_tpl\":\"{{value_json.battery_voltage}}\","
-    "\"dev_cla\":\"voltage\","
-    "\"dev\":{\"ids\":[\"vanfox_001\"]}}", true);
-
-  // Battery Percent
-  mqtt.publish("homeassistant/sensor/vanfox_battery_p/config",
-    "{\"name\":\"VanFox Battery\","
-    "\"stat_t\":\"homeassistant/sensor/vanfox/state\","
-    "\"unit_of_meas\":\"%\","
-    "\"val_tpl\":\"{{value_json.battery_percent}}\","
-    "\"dev_cla\":\"battery\","
-    "\"dev\":{\"ids\":[\"vanfox_001\"]}}", true);
-
-  // WiFi RSSI
-  mqtt.publish("homeassistant/sensor/vanfox_rssi/config",
-    "{\"name\":\"VanFox WiFi Signal\","
-    "\"stat_t\":\"homeassistant/sensor/vanfox/state\","
-    "\"unit_of_meas\":\"dBm\","
-    "\"val_tpl\":\"{{value_json.rssi}}\","
-    "\"dev_cla\":\"signal_strength\","
-    "\"dev\":{\"ids\":[\"vanfox_001\"]}}", true);
-
   Serial.println("MQTT discovery configs published!");
 }
 
@@ -748,12 +748,9 @@ void sendDataToHomeAssistant() {
     "\"temperature\":%.1f,"
     "\"humidity\":%.1f,"
     "\"voc\":%.0f,"
-    "\"nox\":%.0f,"
-    "\"battery_voltage\":%.2f,"
-    "\"battery_percent\":%d,"
-    "\"rssi\":%d}",
+    "\"nox\":%.0f}",  // Fixed: removed trailing comma, added closing brace
     co2_ppm, temperature_c, humidity_rh,
-    voc_index, nox_index, battery_v, battery_p, WiFi.RSSI());
+    voc_index, nox_index);
 
   if (mqtt.publish("homeassistant/sensor/vanfox/state", payload)) {
     Serial.print("Sent to HA: ");

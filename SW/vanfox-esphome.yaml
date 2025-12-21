@@ -1,0 +1,181 @@
+esphome:
+  name: vanfox
+  friendly_name: VanFox Air Quality
+  platform: ESP32
+  board: esp32dev
+
+# Logging
+logger:
+  level: INFO
+
+# Home Assistant API (replaces MQTT)
+api:
+  encryption:
+    key: "YOUR_ENCRYPTION_KEY_HERE"  # Generate with: esphome config vanfox-esphome.yaml
+
+# OTA Updates
+ota:
+  password: "YOUR_OTA_PASSWORD_HERE"
+
+# WiFi
+wifi:
+  ssid: "YOUR_WIFI_SSID"
+  password: "YOUR_WIFI_PASSWORD"
+  power_save_mode: light
+
+  ap:
+    ssid: "VanFox Fallback"
+    password: "vanfox123"
+
+# I2C Bus
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+  frequency: 100kHz
+
+# Globals
+globals:
+  - id: home_mode
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: display_on
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+  - id: last_active
+    type: unsigned long
+    initial_value: '0'
+
+# Mode Switch
+binary_sensor:
+  - platform: gpio
+    id: mode_switch
+    name: "Mode Switch"
+    pin:
+      number: GPIO2
+      mode: INPUT_PULLUP
+    on_press:
+      - lambda: id(home_mode) = true;
+      - wifi.enable:
+      - logger.log: "HOME mode"
+    on_release:
+      - lambda: id(home_mode) = false;
+      - wifi.disable:
+      - logger.log: "TRAVELING mode"
+
+# Sensors
+sensor:
+  # Battery Voltage
+  - platform: adc
+    pin: GPIO35
+    name: "Battery Voltage"
+    id: battery_v
+    update_interval: 10s
+    attenuation: 11db
+    filters:
+      - multiply: 2.0
+      - sliding_window_moving_average:
+          window_size: 5
+
+  # Battery Percent
+  - platform: template
+    name: "Battery"
+    id: battery_pct
+    unit_of_measurement: "%"
+    device_class: battery
+    lambda: |-
+      float v = id(battery_v).state;
+      return ((v - 3.0) / 1.2) * 100.0;
+    filters:
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+  # SCD41 - CO2, Temp, Humidity
+  - platform: scd4x
+    co2:
+      name: "CO2"
+      id: co2
+    temperature:
+      name: "Temperature"
+      id: temp
+    humidity:
+      name: "Humidity"
+      id: humid
+    update_interval: 5s
+
+  # SGP41 - VOC, NOx
+  - platform: sgp4x
+    voc:
+      name: "VOC Index"
+      id: voc
+    nox:
+      name: "NOx Index"
+      id: nox
+    compensation:
+      temperature_source: temp
+      humidity_source: humid
+    update_interval: 1s
+    store_baseline: true
+
+# Display
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"
+    address: 0x3C
+    id: oled
+    update_interval: 1s
+    lambda: |-
+      if (!id(display_on)) {
+        it.fill(COLOR_OFF);
+        return;
+      }
+
+      it.printf(0, 0, id(font1), "CO2: %.0f ppm", id(co2).state);
+      it.printf(0, 14, id(font1), "T:%.1fC H:%.0f%%", id(temp).state, id(humid).state);
+      it.printf(0, 28, id(font1), "VOC:%.0f NOx:%.0f", id(voc).state, id(nox).state);
+
+      if (id(home_mode)) {
+        it.printf(0, 50, id(font1), "HOME - WiFi");
+      } else {
+        it.printf(0, 50, id(font1), "BAT: %.0f%% %.1fV", id(battery_pct).state, id(battery_v).state);
+      }
+
+font:
+  - file: "fonts/arial.ttf"
+    id: font1
+    size: 11
+
+# Display timeout
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          unsigned long now = millis();
+          unsigned long timeout = id(home_mode) ? 30000 : 10000;
+
+          if (id(display_on) && (now - id(last_active)) > timeout) {
+            id(display_on) = false;
+            id(oled).update();
+          }
+
+# Manual controls via Home Assistant
+switch:
+  - platform: template
+    name: "Display"
+    lambda: return id(display_on);
+    turn_on_action:
+      - lambda: |-
+          id(display_on) = true;
+          id(last_active) = millis();
+      - component.update: oled
+    turn_off_action:
+      - lambda: id(display_on) = false;
+      - component.update: oled
+
+# On boot
+esphome:
+  on_boot:
+    - lambda: id(last_active) = millis();
