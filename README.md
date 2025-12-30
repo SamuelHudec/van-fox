@@ -2,9 +2,12 @@
 
 ![preview](doc/3.jpeg)
 
-**VanFox** is a fully self-contained ESP32-C3-based air quality monitor designed for camper vans and Home Assistant together.
-It combines multiple environmental sensors, a motion-activated OLED display and gesture-based control. The secondary goal was to make parts available in one place.
-The battery gives it the ability to operate without power, in case of a power outage or to take it outside with you.
+**VanFox** is a fully self-contained ESP32-C3-based air quality monitor designed for camper vans and Home Assistant.
+It combines multiple environmental sensors, a motion-activated OLED display and gesture-based control.
+
+VanFox is designed to be open, hackable and power-efficient, with a strong focus on real-world camper van usage. Thanks to the built-in battery, it can operate without external power — during off-grid camping, power outages, or when taken outside.
+
+As a camper, I like when one device serves more than one purpose. VanFox can travel with you in your van, and when you are home, it can also be used as a stationary air quality monitor for your household.
 
 ## Assembly Guide
 
