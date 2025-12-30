@@ -30,9 +30,9 @@
 
 // ===================================================================
 // ---------------------- WIFI & MQTT CONFIG -------------------------
-#define WIFI_SSID "id"
-#define WIFI_PASSWORD "pass"
-#define MQTT_SERVER "192.168.1.x"
+#define WIFI_SSID "copele"
+#define WIFI_PASSWORD "Chudoba97411"
+#define MQTT_SERVER "192.168.1.57"
 #define MQTT_PORT 1883
 #define RESTART_PIN 2
 #define MQTT_NAME "vanfox"
