@@ -44,8 +44,6 @@ Bat: 100% (4.05V)
 - OLED automatically turns off after 10 s of no motion.
 - Device enters **light sleep** between sensor reads for power saving. (this feature is in experimental phase)
 
----
-
 ### Level Mode (Digital Spirit Level)
 Activated by **triple shake gesture**:
 - Shows inclination (roll) in degrees.
@@ -53,11 +51,9 @@ Activated by **triple shake gesture**:
 - Uses continuous polling (no sleep) — ideal for calibration or debugging.
 - USB remains active → can be flashed without reset.
 
+### Switch
+For now it serves for switching between "Traveling mode" and "Home mode". 
 
-## Gesture Controls
-
-| Gesture | Function |
-|----------|-----------|
-| **Triple shake** | Toggle between Air Mode ↔ Level Mode |
-| **No motion for 10 s** | Display turns off (Air Mode only) |
-| **Level Mode active for > 2 min** | Automatically returns to Air Mode |
+## TODO
+- use switch for deepsleep mode insetead of switching between traveling and home mode,
+- add boudaries for buzz,
