@@ -6,9 +6,9 @@
 It combines multiple environmental sensors, a motion-activated OLED display and gesture-based control. The secondary goal was to make parts available in one place.
 The battery gives it the ability to operate without power, in case of a power outage or to take it outside with you.
 
-## Postup
+## Assembly Guide
 
-1. Kupte si componenty:
+1. Purchase the components
 - ~298czk [Board](https://www.laskakit.cz/laskakit-microesp/)
 - ~768czk [CO2, temerature and humidity senzor](https://www.laskakit.cz/laskakit-scd41-senzor-co2--teploty-a-vlhkosti-vzduchu)
 - ~368czk [VOx and NOx senzor](https://www.laskakit.cz/laskakit-sgp41-voc-a-nox-senzor-kvality-ovzdusi/)
@@ -19,15 +19,17 @@ The battery gives it the ability to operate without power, in case of a power ou
 - ~4czk [Switch](https://www.laskakit.cz/posuvny-prepinac-0-5a-50vdc/)
 - 4x~12czk [uŠup](https://www.laskakit.cz/--sup--stemma-qt--qwiic-jst-sh-4-pin-kabel-5cm/)
 
-2. Vytlačte si [krabičku](3D) pomocou 3D tlačiarne,
-3. Pripajkujte buzz, switch, I2C a bateriu k ESP doske. Pri I2C a baterii som nemal na výber, ale GPIO piny som umiestinl čo najdalej od usb-c portu. Len preto aby mi doska dobre sadla do krabičky.
-4. Urob kopiu `secrets.h` z `secrets_example.h` a vypln. 
-5. Pomocou Arduino IDE flash
-6. Ak chceš využívať Home Assistante, stiahni si MQTT broker addon a cez config v addone pridaj zariadenie `MQTT_NAME` a `MQTT_PASSWORD`, ktoré si vyplnil.
+2. 3D print the enclosure from [3D](3D).
+3. Solder the buzzer, switch, I²C cables, and battery to the ESP board. For I²C and battery, the pin placement is fixed by the board design. GPIO pins for the buzzer and switch were intentionally placed as far as possible from the USB-C connector, so the board fits properly into the enclosure.
+4. Create a copy of `secrets_example.h` and rename it to `secrets.h`, then fill in all required values. 
+5. Use Arduino IDE to flash the firmware to the device.
+6. Home Assistant integration (optional)
+- Install the MQTT Broker add-on.
+- In the add-on configuration, add the device credentials `MQTT_NAME` and `MQTT_PASSWORD`.
 
-Je tu možnosť využiť aj [ESPhome](SW/vanfox-esphome.yaml), ale tu nie je podpora pre gyrskop, takže display bude svietiť nonstop.
+There is also an option to use [ESPhome](SW/vanfox-esphome.yaml). However, gyroscope support is currently missing, which means, the display cannot be turned off automatically and will remain on continuously.
 
-![preview2](doc/2.heic)
+![preview2](doc/2.jpeg)
 
 ## Operating Modes
 
