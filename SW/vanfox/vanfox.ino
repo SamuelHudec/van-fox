@@ -27,16 +27,7 @@
 #include <PubSubClient.h>
 #include "esp_wifi.h"
 #include "esp_bt.h"
-
-// ===================================================================
-// ---------------------- WIFI & MQTT CONFIG -------------------------
-#define WIFI_SSID "copele"
-#define WIFI_PASSWORD "Chudoba97411"
-#define MQTT_SERVER "192.168.1.57"
-#define MQTT_PORT 1883
-#define RESTART_PIN 2
-#define MQTT_NAME "vanfox"
-#define MQTT_PASSWORD "vanfox97411"
+#include "secrets.h"
 
 // ===================================================================
 // ---------------------- OLED CONFIG --------------------------------
