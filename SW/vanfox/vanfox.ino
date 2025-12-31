@@ -30,6 +30,10 @@
 #include "secrets.h"
 
 // ===================================================================
+// ---------------------- PINS CONFIG --------------------------------
+#define SWITCH_PIN 2
+
+// ===================================================================
 // ---------------------- OLED CONFIG --------------------------------
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 32
@@ -62,12 +66,12 @@ float readBatteryVoltage() {
 
 int voltageToPercent(float voltage) {
   voltage = constrain(voltage, 3.0, 4.0);
-  return (int)((voltage - 3.0) * 100 / (4.2 - 3.0));
+  return (int)((voltage - 3.0) * 100 / (4.0 - 3.0));
 }
 
 // ===================================================================
 // ---------------------- LEVEL OFFSETS -------------------------------
-const float ROLL_OFFSET  = 0.5;  // Calibration offset for roll (adjust on level surface)
+const float ROLL_OFFSET  = 0.0;  // Calibration offset (adjust on level surface)
 
 // ===================================================================
 // ---------------------- GLOBAL VARIABLES ---------------------------
@@ -138,7 +142,7 @@ void setup() {
   delay(100);              // Let it fully shut down
 
   // --- Configure mode switch ---
-  pinMode(RESTART_PIN, INPUT_PULLUP);
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
 
   // --- I2C Init ---
   Wire.begin(8, 10);   // SDA=8, SCL=10
@@ -166,7 +170,7 @@ void setup() {
   delay(2000);
 
   // Check switch position
-  bool switchOn = digitalRead(RESTART_PIN) == HIGH;
+  bool switchOn = digitalRead(SWITCH_PIN) == HIGH;
 
   if (switchOn) {
     // Switch ON - Try HOME mode with WiFi
@@ -290,7 +294,7 @@ void loop() {
 
   if (now - lastSwitchCheck >= 2000) {  // Check every 2 seconds
     lastSwitchCheck = now;
-    bool currentSwitchState = digitalRead(RESTART_PIN) == HIGH;
+    bool currentSwitchState = digitalRead(SWITCH_PIN) == HIGH;
 
     // Detect switch change
     if (currentSwitchState != lastSwitchState) {
@@ -739,7 +743,7 @@ void sendDataToHomeAssistant() {
     "\"temperature\":%.1f,"
     "\"humidity\":%.1f,"
     "\"voc\":%.0f,"
-    "\"nox\":%.0f}",  // Fixed: removed trailing comma, added closing brace
+    "\"nox\":%.0f}",
     co2_ppm, temperature_c, humidity_rh,
     voc_index, nox_index);
 
