@@ -21,6 +21,7 @@ As a camper, I like when one device serves more than one purpose. VanFox can tra
 	- ~6czk [Buzz](https://www.laskakit.cz/aktivni-bzucak-3-3v/)
 	- ~4czk [Switch](https://www.laskakit.cz/posuvny-prepinac-0-5a-50vdc/)
 	- 4x~12czk [uŠup](https://www.laskakit.cz/--sup--stemma-qt--qwiic-jst-sh-4-pin-kabel-5cm/)
+	- M2x10 screws, I bougth a box and trimmed as needed
 
 2. 3D print the enclosure from [3D](3D).
 3. Solder the buzzer, switch, I²C cables, and battery to the ESP board. For I²C and battery, the pin placement is fixed by the board design. GPIO pins for the buzzer and switch were intentionally placed as far as possible from the USB-C connector, so the board fits properly into the enclosure.
@@ -36,27 +37,36 @@ There is also an option to use [ESPhome](SW/vanfox-esphome.yaml). However, gyros
 
 ## Operating Modes
 
-### Air Quality Mode (default)
-Displays current environmental readings:
+### Power Modes (Switch-Controlled)
+
+**Switch ON - Device Active:**
+- **Home Mode** (WiFi available)
+  - Connects to Home Assistant via MQTT
+  - Sends sensor data
+  - Display timeout: 30 seconds
+- **Traveling Mode** (No WiFi)
+  - Runs offline, no cloud connectivity
+  - Light sleep between sensor reads (~90% power savings)
+  - Display timeout: 10 seconds
+
+**Switch OFF - Deep Sleep:**
+- Ultra-low power (~10µA draw)
+- Wakes every 60 seconds to check switch state
+- Device boots when switch turned ON
+
+### Display Modes (Available in Both Home & Traveling)
+
+#### Air Quality Mode (Default)
+Shows real-time environmental readings (Motion detection wakes display):
 ```
 CO2: 412 ppm
 T: 21.3°C  H: 45.7%
 VOC: 102  NOx: 34
 Bat: 100% (4.05V)
 ```
-- OLED automatically turns off after 10 s of no motion.
-- Device enters **light sleep** between sensor reads for power saving. (this feature is in experimental phase)
 
-### Level Mode (Digital Spirit Level)
-Activated by **triple shake gesture**:
-- Shows inclination (roll) in degrees.
-- Automatically returns to **Air Mode** after 2 minutes.
-- Uses continuous polling (no sleep) — ideal for calibration or debugging.
-- USB remains active → can be flashed without reset.
-
-### Switch
-For now it serves for switching between "Traveling mode" and "Home mode". 
+#### Level Mode (Digital Spirit Level)
+Activated by **triple shake gesture**. Shows roll angle in degrees for vehicle leveling. Auto-returns to Air Quality Mode after 2 minutes
 
 ## TODO
-- use switch for deepsleep mode insetead of switching between traveling and home mode,
-- add boudaries for buzz,
+- add boudaries for buzz

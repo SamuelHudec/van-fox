@@ -27,6 +27,8 @@
 #include <PubSubClient.h>
 #include "esp_wifi.h"
 #include "esp_bt.h"
+#include "driver/gpio.h"
+#include "driver/rtc_io.h"
 #include "secrets.h"
 
 // ===================================================================
@@ -88,20 +90,19 @@ unsigned long lastModeSwitch = 0;
 
 // ---------------------- TIMERS & PERIODS ---------------------------
 const uint32_t MOTION_PERIOD_MS   = 100;    // IMU polling (shake + motion)
-const uint32_t AIR_DISPLAY_MS     = 1000;  // redraw air screen
-const uint32_t LEVEL_DISPLAY_MS   = 200;   // redraw level screen
-const uint32_t SCD_READ_MS        = 2000;  // SCD41 read attempt
-const uint32_t SGP_READ_MS        = 2000;  // SGP41 read attempt
-const uint32_t HOME_DISPLAY_TIMEOUT = 30000;      // 30s
+const uint32_t AIR_DISPLAY_MS     = 1000;   // redraw air screen
+const uint32_t LEVEL_DISPLAY_MS   = 200;    // redraw level screen
+const uint32_t AIR_SENSOR_READ_MS = 2000;   // SCD41 & SGP41 read interval
+const uint32_t HOME_DISPLAY_TIMEOUT = 30000;       // 30s
 const uint32_t TRAVELING_DISPLAY_TIMEOUT = 10000;  // 10s
-const uint32_t HA_SEND_INTERVAL_MS = 60000;  // 10 minutes
-const uint32_t MQTT_RECONNECT_INTERVAL_MS = 60000;  // 60s
+const uint32_t HA_SEND_INTERVAL_MS = 300000;       // 5min
+const uint32_t MQTT_RECONNECT_INTERVAL_MS = 60000; // 60s
+const uint32_t DEEP_SLEEP_WAKEUP_SEC = 60;         // Wake every 60s to check switch
 
 uint32_t t_motion = 0;
 uint32_t t_air    = 0;
 uint32_t t_level  = 0;
-uint32_t t_scd    = 0;
-uint32_t t_sgp    = 0;
+uint32_t t_air_sensor = 0;  // Replaces t_scd and t_sgp
 uint32_t t_ha_send = 0;
 uint32_t t_mqtt_reconnect = 0;
 
@@ -132,18 +133,52 @@ bool detectShake(float shakeIntensity) {
 }
 
 // ===================================================================
+// ---------------------- DEEP SLEEP FUNCTION ------------------------
+void enterDeepSleep() {
+  Serial.println("Switch OFF - entering deep sleep...");
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 10);
+  display.println("Powering OFF...");
+  display.println("Flip switch to wake");
+  display.display();
+  delay(2000);
+
+  display.clearDisplay();
+  display.display();
+
+  // Configure timer wakeup: wake periodically to check switch state
+  esp_sleep_enable_timer_wakeup(DEEP_SLEEP_WAKEUP_SEC * 1000000ULL);
+
+  Serial.printf("Entering deep sleep (%ds wakeup)...\n", DEEP_SLEEP_WAKEUP_SEC);
+  delay(100);
+  esp_deep_sleep_start();
+}
+
+// ===================================================================
 // ---------------------- SETUP --------------------------------------
 void setup() {
+  // --- Configure mode switch FIRST (before any other init) ---
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
+
+  // Check if we woke from deep sleep with timer wakeup
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
+    if (digitalRead(SWITCH_PIN) == LOW) {
+      esp_sleep_enable_timer_wakeup(DEEP_SLEEP_WAKEUP_SEC * 1000000ULL);
+      esp_deep_sleep_start();
+    }
+  }
+
   Serial.begin(115200);
   delay(1000);
 
   // --- Disable WiFi immediately to prevent auto-connect ---
-  WiFi.persistent(false);  // Don't save credentials
-  WiFi.mode(WIFI_OFF);     // Turn off WiFi completely
-  delay(100);              // Let it fully shut down
-
-  // --- Configure mode switch ---
-  pinMode(SWITCH_PIN, INPUT_PULLUP);
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_OFF);
+  delay(100);
 
   // --- I2C Init ---
   Wire.begin(8, 10);   // SDA=8, SCL=10
@@ -170,8 +205,16 @@ void setup() {
   // Give WiFi hardware time to stabilize after boot
   delay(2000);
 
-  // Check switch position
   bool switchOn = digitalRead(SWITCH_PIN) == HIGH;
+
+  // If switch is OFF, enter deep sleep immediately (no sensor init needed)
+  if (!switchOn) {
+    display.println("Switch OFF - Power");
+    display.println("saving mode");
+    display.display();
+    delay(1000);
+    enterDeepSleep();
+  }
 
   if (switchOn) {
     // Switch ON - Try HOME mode with WiFi
@@ -192,7 +235,7 @@ void setup() {
     if (initWiFi()) {
       currentMode = MODE_HOME;
       display.println("WiFi Connected!");
-      display.printf("IP: %s", WiFi.localIP().toString().c_str());
+      display.printf("IP: %s\n", WiFi.localIP().toString().c_str());
       display.display();
       delay(1000);
 
@@ -204,27 +247,12 @@ void setup() {
       display.display();
       delay(2000);
     } else {
-      // WiFi failed, but switch says HOME - show error
       currentMode = MODE_TRAVELING;
       display.println("WiFi Failed!");
       display.println("Running offline");
       display.display();
       delay(2000);
     }
-  } else {
-    // Switch OFF - TRAVELING mode (no WiFi)
-    Serial.println("Switch OFF - TRAVELING mode");
-    currentMode = MODE_TRAVELING;
-    display.println("Switch: TRAVEL Mode");
-    display.println("WiFi disabled");
-    display.display();
-    delay(2000);
-
-    // Disable WiFi/BT for power saving
-    esp_wifi_stop();
-    esp_wifi_deinit();
-    esp_bt_controller_disable();
-    esp_bt_controller_deinit();
   }
 
   // ---------------- SENSOR INITIALIZATION ----------------
@@ -247,7 +275,6 @@ void setup() {
   Serial.println("Initializing SGP41...");
   sgp41.begin(Wire);
   delay(200);
-  // jednoduchý test čítania
   uint16_t rawVoc, rawNox;
   uint16_t dummyH = 0, dummyT = 0;
   if (sgp41.measureRawSignals(dummyH, dummyT, rawVoc, rawNox) == 0) {
@@ -293,7 +320,7 @@ void loop() {
   static uint32_t lastSwitchCheck = 0;
   static bool lastSwitchState = HIGH;
 
-  if (now - lastSwitchCheck >= 2000) {  // Check every 2 seconds
+  if (now - lastSwitchCheck >= 2000) {
     lastSwitchCheck = now;
     bool currentSwitchState = digitalRead(SWITCH_PIN) == HIGH;
 
@@ -302,7 +329,6 @@ void loop() {
       lastSwitchState = currentSwitchState;
 
       if (currentSwitchState) {
-        // Switch turned ON - switch to HOME mode
         Serial.println("Switch ON - switching to HOME mode");
 
         display.clearDisplay();
@@ -313,7 +339,6 @@ void loop() {
         display.display();
         delay(1000);
 
-        // Try to connect WiFi
         if (initWiFi()) {
           currentMode = MODE_HOME;
           initHomeAssistantAPI();
@@ -323,35 +348,16 @@ void loop() {
         }
 
       } else {
-        // Switch turned OFF - switch to TRAVELING mode
-        Serial.println("Switch OFF - switching to TRAVELING mode");
-
-        display.clearDisplay();
-        display.setTextSize(1);
-        display.setCursor(0, 10);
-        display.println("Switching to");
-        display.println("TRAVELING MODE...");
-        display.display();
-        delay(1000);
-
-        // Disconnect WiFi and MQTT
-        if (currentMode == MODE_HOME) {
-          mqtt.disconnect();
-          WiFi.disconnect(true);
-          WiFi.mode(WIFI_OFF);
-          esp_wifi_stop();
-          esp_wifi_deinit();
-        }
-
-        currentMode = MODE_TRAVELING;
-        Serial.println("TRAVELING mode activated");
+        enterDeepSleep();
       }
     }
   }
 
-  // --- SCD41 (CO2, T, RH) ---
-  if (now - t_scd >= SCD_READ_MS) {
-    t_scd = now;
+  // --- Air Quality Sensors (SCD41 + SGP41) ---
+  if (now - t_air_sensor >= AIR_SENSOR_READ_MS) {
+    t_air_sensor = now;
+
+    // Read SCD41 (CO2, Temperature, Humidity)
     bool dataReady = false;
     if (!scd4x.getDataReadyStatus(dataReady) && dataReady) {
       uint16_t co2Raw;
@@ -362,11 +368,8 @@ void loop() {
         humidity_rh = hum;
       }
     }
-  }
 
-  // --- SGP41 (VOC, NOx) ---
-  if (now - t_sgp >= SGP_READ_MS) {
-    t_sgp = now;
+    // Read SGP41 (VOC, NOx) - uses temp/humidity from SCD41 for compensation
     uint16_t compHumidity = (uint16_t)((humidity_rh * 65535) / 100);
     uint16_t compTemperature = (uint16_t)(((temperature_c + 45) * 65535) / 175);
     uint16_t rawVoc = 0, rawNox = 0;
@@ -387,19 +390,14 @@ void loop() {
   if (currentMode == MODE_HOME) {
     if (mqtt.connected()) {
       mqtt.loop();
-
-      // Send data periodically
       if (now - t_ha_send >= HA_SEND_INTERVAL_MS) {
         t_ha_send = now;
         sendDataToHomeAssistant();
       }
     } else {
-      // Reconnect every 60s
       if (now - t_mqtt_reconnect >= MQTT_RECONNECT_INTERVAL_MS) {
         t_mqtt_reconnect = now;
         Serial.println("Reconnecting to MQTT...");
-
-        // Check WiFi first
         if (WiFi.status() != WL_CONNECTED) {
           Serial.println("WiFi disconnected - reconnecting...");
           WiFi.disconnect();
@@ -412,12 +410,10 @@ void loop() {
 
           if (WiFi.status() != WL_CONNECTED) {
             Serial.println("WiFi reconnect failed");
-            return;  // Skip rest of loop
+            return;
           }
           Serial.println("WiFi reconnected!");
         }
-
-        // Then reconnect MQTT
         if (mqtt.connect("vanfox", "vanfox", "vanfox97411")) {
           Serial.println("MQTT reconnected");
           publishDiscoveryConfig();
@@ -531,7 +527,7 @@ void loop() {
     if (!gyroMode && (now - t_air >= AIR_DISPLAY_MS)) {
       t_air = now;
       display.clearDisplay();
-      display.setTextSize(1);  // Reset text size for air quality display
+      display.setTextSize(1);
       display.setCursor(0, 0);
       display.printf("CO2: %.0f ppm\n", co2_ppm);
       display.printf("T: %.1fC  H: %.1f%%\n", temperature_c, humidity_rh);
@@ -555,20 +551,15 @@ void loop() {
     if (gyroMode && (now - t_level >= LEVEL_DISPLAY_MS)) {
       t_level = now;
       imu.getSensorData();
-
-      // Calculate roll (side-to-side tilt) only
       float roll = atan2(imu.data.accelY,
                          sqrt(imu.data.accelX * imu.data.accelX + imu.data.accelZ * imu.data.accelZ))
                    * 180.0 / PI;
 
       // Apply calibration offset
       roll += ROLL_OFFSET;
-
-      // Smooth the reading to reduce jitter
       static float smoothRoll = roll;
       smoothRoll = 0.7f * smoothRoll + 0.3f * roll;
 
-      // Display - just the roll angle
       display.clearDisplay();
       display.setTextSize(2);
       display.setCursor(20, 10);
@@ -583,14 +574,9 @@ void loop() {
     // HOME mode: No light sleep (WiFi needs to stay active)
     delay(50);
   } else {  // TRAVELING mode
-    if (!displayOn) {
-      // Enable aggressive light sleep in TRAVELING mode
-      //esp_sleep_enable_timer_wakeup(50000);  // 50ms
-      //esp_light_sleep_start();
-      delay(50);
-    } else {
-      delay(50);
-    }
+    // Enable light sleep with 50ms timer wakeup for power savings
+    esp_sleep_enable_timer_wakeup(50 * 1000);
+    esp_light_sleep_start();
   }
 }
 
@@ -598,15 +584,12 @@ void loop() {
 // ---------------------- WIFI FUNCTIONS -----------------------------
 bool initWiFi() {
   Serial.println("Attempting WiFi connection...");
-
-  // Clean WiFi state before connecting (prevents stale connection issues)
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
   delay(3000);  // Wait 1 second for router rate-limit to clear
 
-  // Disable auto-reconnect to prevent interference
   WiFi.setAutoReconnect(false);
-  WiFi.persistent(false);  // Don't save credentials to flash
+  WiFi.persistent(false);
 
   // Now start fresh connection
   WiFi.mode(WIFI_STA);
@@ -619,7 +602,7 @@ bool initWiFi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    WiFi.setSleep(WIFI_PS_MIN_MODEM);  // Enable modem-sleep for power saving
+    WiFi.setSleep(WIFI_PS_MIN_MODEM);
     Serial.println("\nWiFi connected!");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
@@ -645,7 +628,7 @@ bool initHomeAssistantAPI() {
 
   mqtt.setServer(MQTT_SERVER, MQTT_PORT);
   mqtt.setBufferSize(512);
-  mqtt.setKeepAlive(60);  // Increased from 15 to 60 to prevent timeout with 10-min send interval
+  mqtt.setKeepAlive(60);
 
   int retries = 3;
   while (retries > 0 && !mqtt.connected()) {
