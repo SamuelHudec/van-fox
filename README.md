@@ -13,7 +13,7 @@ As a camper, I like when one device serves more than one purpose. VanFox can tra
 
 1. Purchase the components
 	- ~298czk [Board](https://www.laskakit.cz/laskakit-microesp/)
-	- ~768czk [CO2, temerature and humidity senzor](https://www.laskakit.cz/laskakit-scd41-senzor-co2--teploty-a-vlhkosti-vzduchu)
+	- ~448czk [CO2, temerature and humidity senzor](https://www.laskakit.cz/laskakit-stcc4-senzor-co2--teploty-a-vlhkosti-vzduchu/)
 	- ~368czk [VOx and NOx senzor](https://www.laskakit.cz/laskakit-sgp41-voc-a-nox-senzor-kvality-ovzdusi/)
 	- ~118czk [Battery](https://www.laskakit.cz/ehao-lipol-baterie-603048-900mah-3-7v/)
 	- ~128czk [Oled Display](https://www.laskakit.cz/laskakit-oled-displej-128x32-0-91--i--c/)
@@ -24,7 +24,7 @@ As a camper, I like when one device serves more than one purpose. VanFox can tra
 	- M2x10 screws, I bougth a box and trimmed as needed
 
 2. 3D print the enclosure from [3D](3D).
-3. Solder the buzzer, switch, I²C cables, and battery to the ESP board. For I²C and battery, the pin placement is fixed by the board design. GPIO pins for the buzzer and switch were intentionally placed as far as possible from the USB-C connector, so the board fits properly into the enclosure.
+3. Solder the buzzer, switch, I²C cables, and battery to the ESP board. For I²C and battery, the pin placement is fixed by the board design. GPIO pins for the buzzer (GPIO 3) and switch (GPIO 2) were intentionally placed as far as possible from the USB-C connector, so the board fits properly into the enclosure.
 4. Create a copy of `secrets_example.h` and rename it to `secrets.h`, then fill in all required values. 
 5. Use Arduino IDE to flash the firmware to the device.
 6. Home Assistant integration (optional)
