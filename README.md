@@ -24,7 +24,7 @@ As a camper, I like when one device serves more than one purpose. VanFox can tra
 	- M2x10 screws, I bougth a box and trimmed as needed
 
 2. 3D print the enclosure from [3D](3D).
-3. Solder the buzzer, switch, I²C cables, and battery to the ESP board. For I²C and battery, the pin placement is fixed by the board design. GPIO pins for the buzzer (GPIO 3) and switch (GPIO 2) were intentionally placed as far as possible from the USB-C connector, so the board fits properly into the enclosure.
+3. [Solder](doc/1.jpeg) the buzzer, switch, I²C cables, and battery to the ESP board. For I²C and battery, the pin placement is fixed by the board design. GPIO pins for the buzzer (GPIO 3) and switch (GPIO 2) were intentionally placed as far as possible from the USB-C connector, so the board fits properly into the enclosure.
 4. Create a copy of `secrets_example.h` and rename it to `secrets.h`, then fill in all required values. 
 5. Use Arduino IDE to flash the firmware to the device.
 6. Home Assistant integration (optional)

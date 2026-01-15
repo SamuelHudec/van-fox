@@ -2,7 +2,7 @@
  * VanFox – Portable Air Quality Monitor for Camper Vans
  * -----------------------------------------------------
  * Reads data from:
- *  - SCD41  (CO₂, Temperature, Humidity)
+ *  - STCC4  (CO₂, Temperature, Humidity)
  *  - SGP41  (VOC, NOx)
  *  - BMI270 (Accelerometer, Gyroscope)
  *  - SSD1306 128x32 OLED Display
@@ -18,7 +18,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <SensirionI2cScd4x.h>
+#include <SensirionI2cStcc4.h>
 #include <SensirionI2CSgp41.h>
 #include <VOCGasIndexAlgorithm.h>
 #include <NOxGasIndexAlgorithm.h>
@@ -45,7 +45,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // ===================================================================
 // ---------------------- SENSOR OBJECTS -----------------------------
-SensirionI2cScd4x scd4x;
+SensirionI2cStcc4 stcc4;
 SensirionI2CSgp41 sgp41;
 VOCGasIndexAlgorithm vocAlgorithm;
 NOxGasIndexAlgorithm noxAlgorithm;
@@ -258,17 +258,16 @@ void setup() {
   // ---------------- SENSOR INITIALIZATION ----------------
   bool scd_ok = false, sgp_ok = false, imu_ok = false;
 
-  // --- SCD41 Init ---
-  Serial.println("Initializing SCD41...");
-  scd4x.begin(Wire, 0x62);
+  // --- STCC4 Init ---
+  Serial.println("Initializing STCC4...");
+  stcc4.begin(Wire, STCC4_I2C_ADDR_64);
   delay(500);
-  scd4x.stopPeriodicMeasurement();
-  if (scd4x.reinit() == 0) {
-    scd4x.startPeriodicMeasurement();
-    scd_ok = true;
-    Serial.println("SCD41 ready.");
+  stcc4.stopContinuousMeasurement();
+  if (stcc4.startContinuousMeasurement() == 0) {
+    scd_ok = true;  // Keep variable name for compatibility
+    Serial.println("STCC4 ready.");
   } else {
-    Serial.println("SCD41 not responding!");
+    Serial.println("STCC4 not responding!");
   }
 
   // --- SGP41 Init ---
@@ -297,7 +296,7 @@ void setup() {
   display.clearDisplay();
   display.setCursor(0, 0);
   display.println("Sensor check:");
-  display.printf("SCD41: %s\n", scd_ok ? "OK" : "FAIL");
+  display.printf("STCC4: %s\n", scd_ok ? "OK" : "FAIL");
   display.printf("SGP41: %s\n", sgp_ok ? "OK" : "FAIL");
   display.printf("BMI270: %s\n", imu_ok ? "OK" : "FAIL");
 
@@ -353,23 +352,21 @@ void loop() {
     }
   }
 
-  // --- Air Quality Sensors (SCD41 + SGP41) ---
+  // --- Air Quality Sensors (STCC4 + SGP41) ---
   if (now - t_air_sensor >= AIR_SENSOR_READ_MS) {
     t_air_sensor = now;
 
-    // Read SCD41 (CO2, Temperature, Humidity)
-    bool dataReady = false;
-    if (!scd4x.getDataReadyStatus(dataReady) && dataReady) {
-      uint16_t co2Raw;
-      float temp, hum;
-      if (scd4x.readMeasurement(co2Raw, temp, hum) == 0) {
-        co2_ppm = co2Raw;
-        temperature_c = temp;
-        humidity_rh = hum;
-      }
+    // Read STCC4 (CO2, Temperature, Humidity)
+    int16_t co2Raw;
+    float temp, hum;
+    uint16_t status;
+    if (stcc4.readMeasurement(co2Raw, temp, hum, status) == 0) {
+      co2_ppm = (float)co2Raw;  // Convert int16_t to float
+      temperature_c = temp;
+      humidity_rh = hum;
     }
 
-    // Read SGP41 (VOC, NOx) - uses temp/humidity from SCD41 for compensation
+    // Read SGP41 (VOC, NOx) - uses temp/humidity from STCC4 for compensation
     uint16_t compHumidity = (uint16_t)((humidity_rh * 65535) / 100);
     uint16_t compTemperature = (uint16_t)(((temperature_c + 45) * 65535) / 175);
     uint16_t rawVoc = 0, rawNox = 0;
