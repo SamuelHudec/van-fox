@@ -12,16 +12,16 @@ As a camper, I like when one device serves more than one purpose. VanFox can tra
 ## Assembly Guide
 
 1. Purchase the components
-	- ~298czk [Board](https://www.laskakit.cz/laskakit-microesp/)
-	- ~448czk [CO2, temerature and humidity senzor](https://www.laskakit.cz/laskakit-stcc4-senzor-co2--teploty-a-vlhkosti-vzduchu/)
+	- ~298czk [ESP32 Dev Board](https://www.laskakit.cz/laskakit-microesp/)
+	- ~448czk [CO2, temperature and humidity senzor](https://www.laskakit.cz/laskakit-stcc4-senzor-co2--teploty-a-vlhkosti-vzduchu/)
 	- ~368czk [VOx and NOx senzor](https://www.laskakit.cz/laskakit-sgp41-voc-a-nox-senzor-kvality-ovzdusi/)
 	- ~118czk [Battery](https://www.laskakit.cz/ehao-lipol-baterie-603048-900mah-3-7v/)
 	- ~128czk [Oled Display](https://www.laskakit.cz/laskakit-oled-displej-128x32-0-91--i--c/)
 	- ~198czk [Gyroscop](https://www.laskakit.cz/laskakit-bmi270-6-osy-gyroskop-a-akcelerometr/)
 	- ~6czk [Buzz](https://www.laskakit.cz/aktivni-bzucak-3-3v/)
 	- ~4czk [Switch](https://www.laskakit.cz/posuvny-prepinac-0-5a-50vdc/)
-	- 4x~12czk [uŠup](https://www.laskakit.cz/--sup--stemma-qt--qwiic-jst-sh-4-pin-kabel-5cm/)
-	- M2x10 screws, I bougth a box and trimmed as needed
+	- 4x~12czk [μŠup](https://www.laskakit.cz/--sup--stemma-qt--qwiic-jst-sh-4-pin-kabel-5cm/)
+	- 10x M2 screws, I bougth a box and trimmed as needed
 
 2. 3D print the enclosure from [3D](3D).
 3. [Solder](doc/1.jpeg) the buzzer, switch, I²C cables, and battery to the ESP board. For I²C and battery, the pin placement is fixed by the board design. GPIO pins for the buzzer (GPIO 3) and switch (GPIO 2) were intentionally placed as far as possible from the USB-C connector, so the board fits properly into the enclosure.
